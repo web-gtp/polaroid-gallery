@@ -5,7 +5,7 @@
 // Cargar galería desde Firebase
 async function getGalleryDataFromFirebase() {
     try {
-        console.log('📥 Cargando galería desde Firebase.. .');
+        console.log('📥 Cargando galería desde Firebase...');
         const snapshot = await db.collection('photos').get();
         
         if (snapshot.empty) {
@@ -19,7 +19,7 @@ async function getGalleryDataFromFirebase() {
             data[doc.id] = doc.data().photos || [];
         });
         
-        console. log('✅ Galería cargada:', Object.keys(data).length, 'países');
+        console.log('✅ Galería cargada:', Object.keys(data).length, 'países');
         return data;
     } catch (error) {
         console.error('❌ Error al cargar galería:', error);
@@ -75,7 +75,7 @@ function compressImage(file, maxSizeKB = 800) {
                 canvas.width = width;
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
-                ctx. drawImage(img, 0, 0, width, height);
+                ctx.drawImage(img, 0, 0, width, height);
                 
                 // Comprimir con calidad ajustable
                 let quality = 0.7;
@@ -94,7 +94,7 @@ function compressImage(file, maxSizeKB = 800) {
             img.onerror = reject;
             img.src = e.target.result;
         };
-        reader.onerror = reject;
+        reader. onerror = reject;
         reader.readAsDataURL(file);
     });
 }
