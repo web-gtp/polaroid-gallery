@@ -539,3 +539,186 @@ if (resetBtn) {
         }
     });
 }
+// ============================================
+// FUNCIONALIDAD DE TABS
+// ============================================
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const tabName = this.getAttribute('data-tab');
+        
+        // Remover active de todos
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
+        // Activar el seleccionado
+        this.classList.add('active');
+        document.getElementById(tabName + 'Tab').classList.add('active');
+        
+        // Si es la pestaña de gestionar, cargar fotos
+        if (tabName === 'manage') {
+            loadManagePhotos();
+        }
+    });
+});
+
+// ============================================
+// GESTIONAR FOTOS (ELIMINAR)
+// ============================================
+
+async function loadManagePhotos() {
+    const country = document.getElementById('manageCountry').value;
+    const container = document.getElementById('managePhotosContainer');
+    
+    if (!country) {
+        container.innerHTML = '<p style="color: #999; text-align: center; padding: 40px;">📍 Selecciona un país para ver sus fotos</p>';
+        return;
+    }
+    
+    // Recargar datos desde Firebase
+    galleryData = await getGalleryDataFromFirebase();
+    const photos = galleryData[country] || [];
+    
+    if (photos.length === 0) {
+        container.innerHTML = `<p style="color: #999; text-align: center; padding: 40px;">📭 No hay fotos en ${country}</p>`;
+        return;
+    }
+    
+    container.innerHTML = photos.map((photo, index) => `
+        <div class="photo-card">
+            <img src="${photo. url}" alt="${photo.title}">
+            <div class="photo-card-title">${photo.title}</div>
+            <div class="photo-card-actions">
+                <button class="btn-delete" onclick="deletePhotoFromManage('${country}', ${index})">
+                    🗑️ Eliminar
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Eliminar foto desde el panel de gestión
+window.deletePhotoFromManage = async function(country, index) {
+    const photo = galleryData[country][index];
+    
+    if (confirm(`¿Eliminar "${photo.title}" de ${country}?\n\nEsta acción no se puede deshacer.`)) {
+        galleryData[country].splice(index, 1);
+        
+        const saved = await saveGalleryDataToFirebase(galleryData);
+        
+        if (saved) {
+            showToast(`Foto "${photo.title}" eliminada de ${country}`, 'success');
+            loadManagePhotos(); // Recargar la lista
+            updateCountryPhotoCounts(); // Actualizar contadores
+            
+            // Si está viendo ese país en el modal, actualizar
+            if (currentCountry === country && countryModal. style.display === 'block') {
+                galleryData = await getGalleryDataFromFirebase();
+                if (galleryData[country].length > 0) {
+                    currentPhotoIndex = Math.min(currentPhotoIndex, galleryData[country].length - 1);
+                    loadGalleryPhotos();
+                } else {
+                    countryModal.style.display = 'none';
+                    document.body.style.overflow = 'auto';
+                }
+            }
+        }
+    }
+};
+
+// Event listener para cambio de país en gestionar
+document.getElementById('manageCountry').addEventListener('change', loadManagePhotos);
+
+// ============================================
+// EXPORTAR / IMPORTAR / RESTAURAR
+// ============================================
+
+// Exportar galería
+document.getElementById('exportBtn').addEventListener('click', async function() {
+    try {
+        galleryData = await getGalleryDataFromFirebase();
+        
+        const dataStr = JSON.stringify(galleryData, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `polaroid-gallery-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        
+        URL. revokeObjectURL(url);
+        showToast('✅ Galería exportada exitosamente', 'success');
+    } catch (error) {
+        console.error('Error al exportar:', error);
+        showToast('❌ Error al exportar la galería', 'error');
+    }
+});
+
+// Importar galería
+document.getElementById('importBtn').addEventListener('click', async function() {
+    const fileInput = document.getElementById('importFile');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        showToast('⚠️ Por favor selecciona un archivo JSON', 'warning');
+        return;
+    }
+    
+    if (confirm('⚠️ ¿Importar galería?\n\nEsto REEMPLAZARÁ todas las fotos actuales.\n\n¿Continuar?')) {
+        try {
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    
+                    // Validar estructura
+                    if (typeof importedData !== 'object') {
+                        throw new Error('Formato inválido');
+                    }
+                    
+                    galleryData = importedData;
+                    const saved = await saveGalleryDataToFirebase(galleryData);
+                    
+                    if (saved) {
+                        showToast('✅ Galería importada exitosamente', 'success');
+                        updateCountryPhotoCounts();
+                        fileInput.value = '';
+                    }
+                } catch (error) {
+                    console.error('Error al parsear JSON:', error);
+                    showToast('❌ Archivo JSON inválido', 'error');
+                }
+            };
+            reader.readAsText(file);
+        } catch (error) {
+            console.error('Error al importar:', error);
+            showToast('❌ Error al importar la galería', 'error');
+        }
+    }
+});
+
+// Restaurar galería original
+document.getElementById('resetBtn').addEventListener('click', async function() {
+    if (confirm('⚠️ ¿RESTAURAR GALERÍA ORIGINAL?\n\nEsto ELIMINARÁ todas tus fotos y restaurará las fotos de ejemplo.\n\n¿Estás seguro?')) {
+        if (confirm('⚠️⚠️ ÚLTIMA CONFIRMACIÓN\n\nTodas tus fotos se perderán.\n\n¿Continuar?')) {
+            try {
+                galleryData = JSON.parse(JSON.stringify(originalGalleryData));
+                const saved = await saveGalleryDataToFirebase(galleryData);
+                
+                if (saved) {
+                    showToast('✅ Galería restaurada a su estado original', 'success');
+                    updateCountryPhotoCounts();
+                    
+                    // Recargar la página después de 1 segundo
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                }
+            } catch (error) {
+                console.error('Error al restaurar:', error);
+                showToast('❌ Error al restaurar la galería', 'error');
+            }
+        }
+    }
+});
